@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const appointmentSchema = new mongoose.Schema(
@@ -41,19 +42,23 @@ const appointmentSchema = new mongoose.Schema(
       trim: true,
     },
 
-    appointmentDate: {
+    // Actual appointment start, stored as a UTC instant.
+    startsAt: {
       type: Date,
       required: true,
     },
 
-    startTime: {
-      type: String,
+    // Actual appointment end, stored as a UTC instant.
+    endsAt: {
+      type: Date,
       required: true,
     },
 
-    endTime: {
-      type: String,
-      required: true,
+    // Used for temporary booking holds.
+    // Null means the appointment has no active hold expiry.
+    holdExpiresAt: {
+      type: Date,
+      default: null,
     },
 
     status: {
@@ -79,24 +84,41 @@ const appointmentSchema = new mongoose.Schema(
   }
 );
 
-// Prevent two active appointments for the same doctor and time.
-appointmentSchema.index(
-  {
-    doctor: 1,
-    appointmentDate: 1,
-    startTime: 1,
-  },
-  {
-    unique: true,
-    partialFilterExpression: {
-      status: { $in: ["pending", "confirmed"] },
-    },
+// Validate appointment duration and timestamps.
+appointmentSchema.pre("validate", function () {
+  if (
+    this.startsAt instanceof Date &&
+    this.endsAt instanceof Date &&
+    !Number.isNaN(this.startsAt.getTime()) &&
+    !Number.isNaN(this.endsAt.getTime())
+  ) {
+    const duration =
+      this.endsAt.getTime() - this.startsAt.getTime();
+
+    if (duration <= 0) {
+      this.invalidate(
+        "endsAt",
+        "Appointment end must be after its start."
+      );
+    } else if (duration % (15 * 60 * 1000) !== 0) {
+      this.invalidate(
+        "endsAt",
+        "Appointment duration must be a multiple of 15 minutes."
+      );
+    }
   }
-);
+});
+
+// Efficient clinic and doctor appointment queries.
+appointmentSchema.index({
+  clinic: 1,
+  doctor: 1,
+  startsAt: 1,
+});
 
 appointmentSchema.index({
   clinic: 1,
-  appointmentDate: 1,
+  startsAt: 1,
   status: 1,
 });
 
