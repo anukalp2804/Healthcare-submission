@@ -43,6 +43,15 @@ const clinicSchema = new mongoose.Schema(
       maxlength: 300,
     },
 
+
+    timezone: {
+      type: String,
+      required: true,
+      default: "Asia/Kathmandu",
+      trim: true,
+    },
+
+
     status: {
       type: String,
       enum: ["active", "inactive", "suspended"],
