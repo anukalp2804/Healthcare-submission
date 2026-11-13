@@ -54,3 +54,18 @@ test("should accept a valid 45-minute appointment", async () => {
 
   await assert.doesNotReject(() => appointment.validate());
 });
+
+test("should accept expired appointment status", async () => {
+  const appointment = new Appointment({
+    clinic: new mongoose.Types.ObjectId(),
+    doctor: new mongoose.Types.ObjectId(),
+    service: new mongoose.Types.ObjectId(),
+    patientName: "Test Patient",
+    patientPhone: "+9779800000000",
+    startsAt: new Date("2027-01-01T12:00:00.000Z"),
+    endsAt: new Date("2027-01-01T12:30:00.000Z"),
+    status: "expired",
+  });
+
+  await assert.doesNotReject(() => appointment.validate());
+});

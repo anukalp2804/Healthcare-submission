@@ -69,6 +69,7 @@ const appointmentSchema = new mongoose.Schema(
         "cancelled",
         "completed",
         "no_show",
+        "expired",
       ],
       default: "pending",
     },
