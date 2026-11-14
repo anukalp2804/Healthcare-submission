@@ -123,6 +123,12 @@ appointmentSchema.index({
   status: 1,
 });
 
+// Efficient lookup of expired pending appointment holds.
+appointmentSchema.index({
+  status: 1,
+  holdExpiresAt: 1,
+});
+
 const Appointment = mongoose.model(
   "Appointment",
   appointmentSchema
