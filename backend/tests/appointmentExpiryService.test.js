@@ -146,3 +146,103 @@ test("should not expire an appointment whose hold is still active", async () => 
     AppointmentSlot.deleteMany = originalDeleteMany;
   }
 });
+
+
+test("should reject invalid appointment IDs", async () => {
+  const originalStartSession = mongoose.startSession;
+
+  try {
+    mongoose.startSession = async () => {
+      assert.fail("Database session should not start for an invalid ID");
+    };
+
+    await assert.rejects(
+      () => expireAppointmentHold("invalid-appointment-id"),
+      (error) => {
+        assert.equal(error.statusCode, 400);
+        assert.match(error.message, /Invalid appointment ID/);
+        return true;
+      }
+    );
+  } finally {
+    mongoose.startSession = originalStartSession;
+  }
+});
+
+
+test("should safely handle repeated expiry requests", async () => {
+  const originals = {
+    startSession: mongoose.startSession,
+    findOneAndUpdate: Appointment.findOneAndUpdate,
+    deleteMany: AppointmentSlot.deleteMany,
+  };
+
+  const fakeSession = {
+    withTransaction: async (callback) => callback(),
+    endSession: async () => {},
+  };
+
+  let deletionCalls = 0;
+
+  try {
+    mongoose.startSession = async () => fakeSession;
+
+    // The appointment has already expired, so it no longer matches.
+    Appointment.findOneAndUpdate = async () => null;
+
+    AppointmentSlot.deleteMany = async () => {
+      deletionCalls += 1;
+      return { deletedCount: 0 };
+    };
+
+    const firstResult = await expireAppointmentHold(appointmentId);
+    const secondResult = await expireAppointmentHold(appointmentId);
+
+    assert.equal(firstResult.expired, false);
+    assert.equal(secondResult.expired, false);
+    assert.equal(deletionCalls, 0);
+  } finally {
+    mongoose.startSession = originals.startSession;
+    Appointment.findOneAndUpdate = originals.findOneAndUpdate;
+    AppointmentSlot.deleteMany = originals.deleteMany;
+  }
+});
+
+
+test("should propagate slot deletion errors so the transaction can roll back", async () => {
+  const originals = {
+    startSession: mongoose.startSession,
+    findOneAndUpdate: Appointment.findOneAndUpdate,
+    deleteMany: AppointmentSlot.deleteMany,
+  };
+
+  const fakeSession = {
+    withTransaction: async (callback) => callback(),
+    endSession: async () => {},
+  };
+
+  try {
+    mongoose.startSession = async () => fakeSession;
+
+    Appointment.findOneAndUpdate = async () => ({
+      _id: appointmentId,
+      clinic: clinicId,
+      doctor: doctorId,
+      status: "expired",
+    });
+
+    AppointmentSlot.deleteMany = async () => {
+      throw new Error("Simulated slot deletion failure");
+    };
+
+    await assert.rejects(
+      () => expireAppointmentHold(appointmentId),
+      /Simulated slot deletion failure/
+    );
+  } finally {
+    mongoose.startSession = originals.startSession;
+    Appointment.findOneAndUpdate = originals.findOneAndUpdate;
+    AppointmentSlot.deleteMany = originals.deleteMany;
+  }
+});
+

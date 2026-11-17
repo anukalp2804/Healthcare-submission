@@ -1,7 +1,15 @@
+
 require("dotenv").config();
 
 const app = require("./app");
 const connectDB = require("./config/database");
+
+const {
+  startAppointmentExpiryScheduler,
+  stopAppointmentExpiryScheduler,
+} = require("./services/appointmentExpiryScheduler");
+
+const mongoose = require("mongoose");
 
 const PORT = process.env.PORT || 5000;
 
@@ -13,14 +21,25 @@ const startServer = async () => {
     const server = app.listen(PORT, () => {
       console.log(`Healthcare Submission API running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+
+      // Start expiry cleanup after the database is connected.
+      startAppointmentExpiryScheduler();
     });
 
+    let isShuttingDown = false;
+
     const shutdown = (signal) => {
+      if (isShuttingDown) return;
+
+      isShuttingDown = true;
+
       console.log(`${signal} received. Closing server...`);
+
+      // Stop scheduled jobs before shutting down the server.
+      stopAppointmentExpiryScheduler();
 
       server.close(async () => {
         try {
-          const mongoose = require("mongoose");
           await mongoose.connection.close();
 
           console.log("Server and database connections closed.");
